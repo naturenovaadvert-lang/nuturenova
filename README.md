@@ -8,7 +8,7 @@ Visit the live site at **[https://romackjnr.github.io/wisestores/](https://romac
 
 ## �🎨 Description
 
-Browse flavor products, view product details, and adjust quantities in the local cart. Paystack checkout requires a server-side `PAYSTACK_SECRET_KEY` configured in Vercel.
+Browse flavor products, view product details, and adjust quantities in the local cart. Paystack checkout uses server-side API routes and requires a `PAYSTACK_SECRET_KEY` configured in Vercel.
 
 ## 🚀 Features
 
@@ -112,6 +112,15 @@ npm run build
 ```
 
 Compiled files are written to `docs/` for the GitHub Pages workflow.
+
+### Paystack checkout
+
+The Paystack API routes in `api/paystack/` require a Vercel deployment; the static GitHub Pages demo does not run these routes.
+
+1. In Paystack, start with a **test secret key**. Never share it in chat or commit it to the repository.
+2. In Vercel, open the project’s **Settings → Environment Variables** and add `PAYSTACK_SECRET_KEY` with that secret key. Enable it for the environments you use, then redeploy.
+3. Keep the key server-side: do not prefix it with `VITE_` or put it in frontend code. The `.env.example` file is a placeholder, not a working key.
+4. Test a checkout on the Vercel deployment. Switch to the live secret key in Vercel only when ready to accept real payments, and redeploy.
 
 ## 📱 Responsiveness
 

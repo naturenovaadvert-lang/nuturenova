@@ -141,3 +141,5 @@ vite.config.ts.timestamp-*
 # Local Vite cache and generated GitHub Pages output
 .vite/
 /docs/
+
+.vercel

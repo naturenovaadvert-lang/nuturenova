@@ -98,8 +98,8 @@ const App = () => {
       ) : (
         <>
           <HeroSection />
-          <MessageSection />
           <FlavorSection />
+          <MessageSection />
           <FooterSection />
         </>
       )}
