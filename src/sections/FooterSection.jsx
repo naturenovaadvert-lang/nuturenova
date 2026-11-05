@@ -1,11 +1,6 @@
 const FooterSection = () => {
   return (
     <section className="footer-section">
-      <img
-        src={`${import.meta.env.BASE_URL}images/footer-dip.png`}
-        alt=""
-        className="w-full object-cover -translate-y-1"
-      />
 
       <div className="2xl:h-[110dvh] relative md:pt-[20vh] pt-[10vh]">
         <div className="overflow-hidden z-10">

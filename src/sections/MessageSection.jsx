@@ -17,7 +17,9 @@ const HOLD = 4; // seconds each image stays on screen
 const SLIDE = 1.2; // seconds the slide-up transition takes
 
 const MessageSection = () => {
+  const sectionRef = useRef(null);
   const bgRef = useRef(null);
+  const dipRef = useRef(null);
 
   // Background: each image slides up over the previous one, then loops
   useGSAP(
@@ -71,6 +73,32 @@ const MessageSection = () => {
       return () => mm.revert();
     },
     { scope: bgRef }
+  );
+
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          dipRef.current,
+          { yPercent: -12 },
+          {
+            yPercent: 12,
+            ease: "none",
+            scrollTrigger: {
+              trigger: sectionRef.current,
+              start: "top bottom",
+              end: "bottom top",
+              scrub: true,
+            },
+          }
+        );
+      });
+
+      return () => mm.revert();
+    },
+    { scope: sectionRef }
   );
 
   useGSAP(() => {
@@ -137,7 +165,7 @@ const MessageSection = () => {
   });
 
   return (
-    <section className="message-content">
+    <section ref={sectionRef} className="message-content">
       <div ref={bgRef} className="message-bg" aria-hidden="true">
         {BG_IMAGES.map((src) => (
           <div key={src} className="message-bg-slide">
@@ -145,6 +173,13 @@ const MessageSection = () => {
           </div>
         ))}
       </div>
+      <img
+        ref={dipRef}
+        src={`${import.meta.env.BASE_URL}images/footer-dip.png`}
+        alt=""
+        aria-hidden="true"
+        className="message-dip"
+      />
       <div className="message-overlay" aria-hidden="true" />
       <div className="container mx-auto flex-center py-28 relative z-10">
         <div className="w-full h-full">
@@ -171,7 +206,7 @@ const MessageSection = () => {
             <div className="max-w-md px-10 flex-center overflow-hidden">
               <p>
                 Rev up your rebel spirit and feed the adventure of life with
-                WISEMAX supplements, where you’re one chug away from epic nostalgia and
+                NUTURENOVA supplements, where you’re one chug away from epic nostalgia and
                 fearless fun.
               </p>
             </div>
