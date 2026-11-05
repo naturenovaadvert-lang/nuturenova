@@ -12,7 +12,7 @@ export const PRODUCT_PRICES = {
   "creatine-monohydrate": { price: 45000, originalPrice: 60000 },
   "creatine-powder": { price: 30000, originalPrice: 40000 },
   "creatine-for-women": { price: 30000, originalPrice: 45000 },
-  "serious-mass": { price: 120000, originalPrice: 150000 },
+  "serious-mass": { price: 50, originalPrice: 150000 },
   "gold-standard-whey-vanilla": { price: 140000, originalPrice: 160000 },
   "tota-war-pre-workout": { price: 30000, originalPrice: 40000 },
 };
