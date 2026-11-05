@@ -73,11 +73,26 @@ export default async function handler(request, response) {
     return sendJson(response, 400, { error: "The order total is invalid." });
   }
 
-  const deploymentHost = process.env.VERCEL_URL;
-  const origin = deploymentHost
-    ? `https://${deploymentHost}`
-    : cleanText(request.headers.origin, 300);
-  if (!/^https?:\/\//i.test(origin)) {
+  const publicSiteUrl = cleanText(process.env.PUBLIC_SITE_URL, 300);
+  const productionHost = cleanText(process.env.VERCEL_PROJECT_PRODUCTION_URL, 250);
+  const configuredOrigin = publicSiteUrl
+    ? publicSiteUrl
+    : productionHost
+      ? `https://${productionHost}`
+      : process.env.VERCEL === "1"
+        ? ""
+        : cleanText(request.headers.origin, 300);
+  let origin;
+  try {
+    const parsedOrigin = new URL(configuredOrigin);
+    const isLocalHttp =
+      parsedOrigin.protocol === "http:" &&
+      ["localhost", "127.0.0.1"].includes(parsedOrigin.hostname);
+    if (parsedOrigin.protocol !== "https:" && !isLocalHttp) {
+      throw new Error("Checkout return URL must use HTTPS.");
+    }
+    origin = parsedOrigin.origin;
+  } catch {
     return sendJson(response, 400, { error: "Unable to determine the checkout return URL." });
   }
 

@@ -116,6 +116,13 @@ export default async function handler(request, response) {
         name: transaction.metadata.shipping?.name ?? "",
         email: transaction.customer?.email ?? "",
       },
+      shipping: {
+        phone: transaction.metadata.shipping?.phone ?? "",
+        address: transaction.metadata.shipping?.address ?? "",
+        city: transaction.metadata.shipping?.city ?? "",
+        country: transaction.metadata.shipping?.country ?? "",
+        postal: transaction.metadata.shipping?.postal ?? "",
+      },
       items: verifiedItems,
     });
   } catch {

@@ -62,6 +62,32 @@ const createReceiptPdf = (receipt, PdfConstructor) => {
     y += 7;
   }
 
+  const shipping = receipt.shipping;
+  const addressLines = [
+    shipping.address,
+    [shipping.city, shipping.postal].filter(Boolean).join(" "),
+    shipping.country,
+    shipping.phone ? `Phone: ${shipping.phone}` : "",
+  ].filter(Boolean);
+  if (addressLines.length) {
+    y += 2;
+    document.setFontSize(11);
+    document.text("Shipping address", 20, y);
+    y += 6;
+    document.setFontSize(10);
+    for (const addressLine of addressLines) {
+      const wrappedLines = document.splitTextToSize(addressLine, pageWidth - 40);
+      for (const wrappedLine of wrappedLines) {
+        if (y > 270) {
+          document.addPage();
+          y = 20;
+        }
+        document.text(wrappedLine, 20, y);
+        y += 6;
+      }
+    }
+  }
+
   y += 5;
   document.setFontSize(11);
   document.text("Items", 20, y);

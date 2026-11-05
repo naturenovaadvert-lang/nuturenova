@@ -124,6 +124,10 @@ The Paystack API routes in `api/paystack/` require a Vercel deployment; the stat
 
 After payment verification, customers can download a PDF receipt and open a WhatsApp chat to the store. They must attach the downloaded PDF and tap Send themselves; the site cannot send WhatsApp messages automatically.
 
+For Vercel, keep the production deployment publicly accessible to customers. If using a custom domain, set `PUBLIC_SITE_URL` to its HTTPS origin in the Vercel project environment variables. Otherwise, checkout returns to Vercel's `VERCEL_PROJECT_PRODUCTION_URL` rather than a preview deployment URL. Do not enable deployment protection on the customer-facing production domain.
+
+Payment methods are controlled by Paystack account and channel availability; this app does not restrict the available channels. Enable and confirm supported methods, including OPay if eligible, in the Paystack Dashboard. The options shown to a customer can vary by transaction and Paystack eligibility.
+
 ## 📱 Responsiveness
 
 The project uses Tailwind CSS and React Responsive to ensure an optimal experience on:
