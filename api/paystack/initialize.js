@@ -61,6 +61,7 @@ export default async function handler(request, response) {
   const items = Array.from(quantities, ([productId, quantity]) => ({
     productId,
     quantity,
+    unitPriceNaira: PRODUCT_PRICES[productId].price,
   }));
   const subtotalNaira = items.reduce(
     (sum, item) => sum + PRODUCT_PRICES[item.productId].price * item.quantity,
@@ -94,6 +95,7 @@ export default async function handler(request, response) {
         callback_url: `${origin.replace(/\/$/, "")}/?payment=paystack#checkout`,
         metadata: {
           expected_amount_kobo: amountKobo,
+          shipping_amount_kobo: SHIPPING_FEE * 100,
           items,
           shipping: {
             name,

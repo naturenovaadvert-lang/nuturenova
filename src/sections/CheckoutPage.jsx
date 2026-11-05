@@ -14,6 +14,7 @@ gsap.registerPlugin(useGSAP, SplitText);
 /* ---- Config: adjust to your store -------------------------------- */
 const CART_KEY = "wisemax-cart"; // same key ProductPage writes to
 const INFO_KEY = "wisemax-checkout-info"; // "save this information" storage
+const WHATSAPP_RECEIPT_NUMBER = "2347037270598";
 const COUNTRIES = [
   "Nigeria",
   "Ghana",
@@ -29,6 +30,76 @@ const formatMoney = (amount) =>
     currency: STORE_CURRENCY,
     maximumFractionDigits: 0,
   }).format(amount);
+
+const formatReceiptMoney = (amount) =>
+  `NGN ${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(amount)}`;
+
+const createReceiptPdf = (receipt, PdfConstructor) => {
+  const document = new PdfConstructor();
+  const pageWidth = document.internal.pageSize.getWidth();
+  let y = 22;
+
+  document.setFontSize(22);
+  document.text("NurtureNova", 20, y);
+  y += 10;
+  document.setFontSize(14);
+  document.text("PAYMENT RECEIPT", 20, y);
+  y += 12;
+
+  document.setFontSize(10);
+  document.text(`Reference: ${receipt.reference}`, 20, y);
+  y += 7;
+  if (receipt.paidAt && !Number.isNaN(Date.parse(receipt.paidAt))) {
+    document.text(`Paid: ${new Date(receipt.paidAt).toLocaleString("en-NG")}`, 20, y);
+    y += 7;
+  }
+  if (receipt.customer.name) {
+    document.text(`Customer: ${receipt.customer.name}`, 20, y);
+    y += 7;
+  }
+  if (receipt.customer.email) {
+    document.text(`Email: ${receipt.customer.email}`, 20, y);
+    y += 7;
+  }
+
+  y += 5;
+  document.setFontSize(11);
+  document.text("Items", 20, y);
+  document.text("Amount", pageWidth - 20, y, { align: "right" });
+  y += 7;
+  document.setFontSize(10);
+
+  for (const item of receipt.items) {
+    if (y > 270) {
+      document.addPage();
+      y = 20;
+    }
+
+    const product = [...products, ...heroProducts].find(
+      (entry) => entry.id === item.productId
+    );
+    const name = product?.name ?? item.productId.replace(/-/g, " ");
+    document.text(`${name} x ${item.quantity}`, 20, y);
+    if (item.unitPriceNaira !== null) {
+      document.text(
+        formatReceiptMoney(item.unitPriceNaira * item.quantity),
+        pageWidth - 20,
+        y,
+        { align: "right" }
+      );
+    }
+    y += 7;
+  }
+
+  y += 5;
+  document.setFontSize(13);
+  document.text("Total paid", 20, y);
+  document.text(formatReceiptMoney(receipt.amount / 100), pageWidth - 20, y, {
+    align: "right",
+  });
+
+  return document;
+};
 
 const EMPTY_FORM = {
   email: "",
@@ -157,6 +228,23 @@ const CheckoutPage = ({ onContinue }) => {
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentReference, setPaymentReference] = useState("");
+  const [verifiedReceipt, setVerifiedReceipt] = useState(null);
+  const [receiptError, setReceiptError] = useState("");
+
+  const handleReceiptDownload = async () => {
+    setReceiptError("");
+    try {
+      const { jsPDF } = await import("jspdf");
+      createReceiptPdf(verifiedReceipt, jsPDF).save(
+        `NurtureNova-receipt-${verifiedReceipt.reference}.pdf`
+      );
+    } catch (error) {
+      const details = error instanceof Error ? ` ${error.message}` : "";
+      setReceiptError(
+        `Could not generate the receipt PDF. Please try again.${details}`
+      );
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -191,6 +279,7 @@ const CheckoutPage = ({ onContinue }) => {
         localStorage.removeItem(CART_KEY);
         setCart([]);
         setPaymentReference(reference);
+        setVerifiedReceipt(result);
         setStatus("Payment confirmed. Your order is complete.");
         cleanCallbackUrl();
       })
@@ -471,6 +560,35 @@ const CheckoutPage = ({ onContinue }) => {
                 {status}
                 {paymentReference && <span> Reference: {paymentReference}</span>}
               </p>
+            )}
+            {verifiedReceipt && (
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  className="checkout-submit"
+                  onClick={handleReceiptDownload}
+                >
+                  Download PDF receipt
+                </button>
+                <a
+                  className="checkout-submit"
+                  href={`https://wa.me/${WHATSAPP_RECEIPT_NUMBER}?text=${encodeURIComponent(
+                    `Hello NurtureNova, I have paid successfully. My receipt is attached. Reference: ${verifiedReceipt.reference}. Please confirm my order.`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open WhatsApp chat
+                </a>
+                <p className="checkout-status w-full" role="note">
+                  Download the PDF, then attach it in WhatsApp and tap Send.
+                </p>
+                {receiptError && (
+                  <p className="checkout-status w-full" role="alert">
+                    {receiptError}
+                  </p>
+                )}
+              </div>
             )}
           </form>
 

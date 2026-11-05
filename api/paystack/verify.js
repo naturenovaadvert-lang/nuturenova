@@ -49,24 +49,57 @@ export default async function handler(request, response) {
     }
 
     const items = transaction.metadata?.items;
-    if (!Array.isArray(items) || items.length < 1) {
+    if (!Array.isArray(items) || items.length < 1 || items.length > 20) {
       return sendJson(response, 400, { error: "The transaction is missing valid order details." });
     }
 
-    let expectedAmountKobo = SHIPPING_FEE * 100;
+    let itemsAmountKobo = 0;
+    let hasPriceSnapshot = true;
+    let hasAnyPriceSnapshot = false;
+    const verifiedItems = [];
     for (const item of items) {
       const quantity = Number(item.quantity);
       const pricing = PRODUCT_PRICES[item.productId];
       if (!pricing || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
         return sendJson(response, 400, { error: "The transaction order details are invalid." });
       }
-      expectedAmountKobo += pricing.price * quantity * 100;
+
+      if (item.unitPriceNaira === undefined) {
+        hasPriceSnapshot = false;
+        verifiedItems.push({ productId: item.productId, quantity, unitPriceNaira: null });
+      } else {
+        hasAnyPriceSnapshot = true;
+        const unitPriceNaira = Number(item.unitPriceNaira);
+        if (!Number.isSafeInteger(unitPriceNaira) || unitPriceNaira < 1) {
+          return sendJson(response, 400, { error: "The transaction price details are invalid." });
+        }
+        itemsAmountKobo += unitPriceNaira * quantity * 100;
+        verifiedItems.push({ productId: item.productId, quantity, unitPriceNaira });
+      }
     }
 
+    if (hasAnyPriceSnapshot && !hasPriceSnapshot) {
+      return sendJson(response, 400, { error: "The transaction price details are incomplete." });
+    }
+
+    if (!hasPriceSnapshot) {
+      verifiedItems.forEach((item) => {
+        item.unitPriceNaira = null;
+      });
+    }
+
+    const expectedAmountKobo = Number(transaction.metadata.expected_amount_kobo);
+    const shippingAmountKobo = Number(
+      transaction.metadata.shipping_amount_kobo ?? SHIPPING_FEE * 100
+    );
     if (
       transaction.currency !== STORE_CURRENCY ||
+      !Number.isSafeInteger(expectedAmountKobo) ||
+      expectedAmountKobo < 100 ||
       transaction.amount !== expectedAmountKobo ||
-      Number(transaction.metadata.expected_amount_kobo) !== expectedAmountKobo
+      !Number.isSafeInteger(shippingAmountKobo) ||
+      shippingAmountKobo < 0 ||
+      (hasPriceSnapshot && itemsAmountKobo + shippingAmountKobo !== expectedAmountKobo)
     ) {
       return sendJson(response, 409, {
         error: "The verified payment amount does not match the order total.",
@@ -78,6 +111,12 @@ export default async function handler(request, response) {
       reference: transaction.reference,
       amount: transaction.amount,
       currency: transaction.currency,
+      paidAt: transaction.paid_at,
+      customer: {
+        name: transaction.metadata.shipping?.name ?? "",
+        email: transaction.customer?.email ?? "",
+      },
+      items: verifiedItems,
     });
   } catch {
     return sendJson(response, 502, { error: "Could not reach Paystack. Please try again." });

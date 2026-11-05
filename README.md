@@ -122,6 +122,8 @@ The Paystack API routes in `api/paystack/` require a Vercel deployment; the stat
 3. Keep the key server-side: do not prefix it with `VITE_` or put it in frontend code. The `.env.example` file is a placeholder, not a working key.
 4. Test a checkout on the Vercel deployment. Switch to the live secret key in Vercel only when ready to accept real payments, and redeploy.
 
+After payment verification, customers can download a PDF receipt and open a WhatsApp chat to the store. They must attach the downloaded PDF and tap Send themselves; the site cannot send WhatsApp messages automatically.
+
 ## 📱 Responsiveness
 
 The project uses Tailwind CSS and React Responsive to ensure an optimal experience on:
