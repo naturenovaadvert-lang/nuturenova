@@ -4,6 +4,8 @@ import {
   SHIPPING_FEE,
   STORE_CURRENCY,
 } from "../../src/constants/product-pricing.js";
+import { DELIVERY_PICKUP } from "../../src/constants/delivery.js";
+import { findOffice, GIG_STATES } from "../../src/constants/gig-offices.js";
 
 const sendJson = (response, status, body) =>
   response.status(status).json(body);
@@ -36,8 +38,36 @@ export default async function handler(request, response) {
   if (!/^\S+@\S+\.\S+$/.test(email)) {
     return sendJson(response, 400, { error: "A valid customer email is required." });
   }
-  if (!name || !phone || !address || !city || !country || !postal) {
+  const isPickup = request.body?.delivery?.method === DELIVERY_PICKUP;
+  if (!name || !phone) {
+    return sendJson(response, 400, { error: "Complete the customer details." });
+  }
+  if (!isPickup && (!address || !city || !country || !postal)) {
     return sendJson(response, 400, { error: "Complete the customer and shipping details." });
+  }
+
+  // Pickup: the office must exist in our own list. GIG's delivery fee is paid
+  // at the office, so nothing is added to the online total.
+  let delivery = { method: "home" };
+  if (isPickup) {
+    const pickupState = cleanText(request.body.delivery.state, 40);
+    const office = GIG_STATES.includes(pickupState)
+      ? findOffice(pickupState, cleanText(request.body.delivery.stationId, 120))
+      : null;
+    if (!office) {
+      return sendJson(response, 400, { error: "Choose a valid GIG pickup office." });
+    }
+    delivery = {
+      method: DELIVERY_PICKUP,
+      feePaidAtPickup: true,
+      station: {
+        id: office.id,
+        name: office.name,
+        address: office.address,
+        city: office.town,
+        state: office.state,
+      },
+    };
   }
 
   const requestedItems = request.body?.items;
@@ -112,14 +142,35 @@ export default async function handler(request, response) {
           expected_amount_kobo: amountKobo,
           shipping_amount_kobo: SHIPPING_FEE * 100,
           items,
-          shipping: {
-            name,
-            phone,
-            address,
-            city,
-            country,
-            postal,
-          },
+          delivery,
+          // Shown on the transaction page of the Paystack dashboard
+          custom_fields: [
+            {
+              display_name: "Delivery",
+              variable_name: "delivery",
+              value: isPickup
+                ? `GIG pickup: ${delivery.station.name}, ${delivery.station.state} (${delivery.station.address}). Customer pays GIG fee at the office.`
+                : "Home delivery",
+            },
+            { display_name: "Receiver", variable_name: "receiver", value: `${name}, ${phone}` },
+          ],
+          shipping: isPickup
+            ? {
+                name,
+                phone,
+                address: delivery.station.address,
+                city: delivery.station.city,
+                country: "Nigeria",
+                postal: "",
+              }
+            : {
+                name,
+                phone,
+                address,
+                city,
+                country,
+                postal,
+              },
         },
       }),
     });

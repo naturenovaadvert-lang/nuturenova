@@ -123,6 +123,7 @@ export default async function handler(request, response) {
         country: transaction.metadata.shipping?.country ?? "",
         postal: transaction.metadata.shipping?.postal ?? "",
       },
+      delivery: transaction.metadata.delivery ?? { method: "home" },
       items: verifiedItems,
     });
   } catch {

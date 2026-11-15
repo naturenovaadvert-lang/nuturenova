@@ -8,6 +8,8 @@ import {
   SHIPPING_FEE,
   STORE_CURRENCY,
 } from "../constants/product-pricing";
+import { DELIVERY_HOME, DELIVERY_PICKUP } from "../constants/delivery";
+import { getOffices, GIG_STATES } from "../constants/gig-offices";
 
 gsap.registerPlugin(useGSAP, SplitText);
 
@@ -33,6 +35,14 @@ const formatMoney = (amount) =>
 
 const formatReceiptMoney = (amount) =>
   `NGN ${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(amount)}`;
+
+const buildWhatsappText = (receipt) => {
+  const station = receipt.delivery?.method === "pickup" ? receipt.delivery.station : null;
+  const pickupLine = station
+    ? ` I will pick up at GIG Logistics ${station.name}, ${station.state} (${station.address}).`
+    : "";
+  return `Hello NurtureNova, I have paid successfully. My receipt is attached. Reference: ${receipt.reference}.${pickupLine} Please confirm my order.`;
+};
 
 const createReceiptPdf = (receipt, PdfConstructor) => {
   const document = new PdfConstructor();
@@ -63,16 +73,25 @@ const createReceiptPdf = (receipt, PdfConstructor) => {
   }
 
   const shipping = receipt.shipping;
-  const addressLines = [
-    shipping.address,
-    [shipping.city, shipping.postal].filter(Boolean).join(" "),
-    shipping.country,
-    shipping.phone ? `Phone: ${shipping.phone}` : "",
-  ].filter(Boolean);
+  const pickup = receipt.delivery?.method === "pickup" ? receipt.delivery.station : null;
+  const addressLines = pickup
+    ? [
+        pickup.name,
+        pickup.address,
+        pickup.state,
+        shipping.phone ? `Phone: ${shipping.phone}` : "",
+        "Pay the GIG delivery fee at the office when you collect.",
+      ].filter(Boolean)
+    : [
+        shipping.address,
+        [shipping.city, shipping.postal].filter(Boolean).join(" "),
+        shipping.country,
+        shipping.phone ? `Phone: ${shipping.phone}` : "",
+      ].filter(Boolean);
   if (addressLines.length) {
     y += 2;
     document.setFontSize(11);
-    document.text("Shipping address", 20, y);
+    document.text(pickup ? "GIG Logistics pickup office" : "Shipping address", 20, y);
     y += 6;
     document.setFontSize(10);
     for (const addressLine of addressLines) {
@@ -161,11 +180,12 @@ const writeCart = (cart) => {
 };
 
 /* ---- Validation ---------------------------------------------------- */
-const validate = (v) => {
+const validate = (v, isPickup = false) => {
   const errors = {};
   if (!/^\S+@\S+\.\S+$/.test(v.email.trim())) errors.email = "Enter a valid email address.";
   if (v.phone.replace(/\D/g, "").length < 7) errors.phone = "Enter a valid phone number.";
   if (!v.name.trim()) errors.name = "Enter your full name.";
+  if (isPickup) return errors; // pickup needs no street address, city, or postal code
   if (!v.address.trim()) errors.address = "Enter your street address.";
   if (!v.city.trim()) errors.city = "Enter your city.";
   if (!v.country.trim()) errors.country = "Enter your country.";
@@ -245,6 +265,38 @@ const Field = ({ id, label, icon, error, ...inputProps }) => (
   </div>
 );
 
+const SelectField = ({ id, label, icon, error, children, ...selectProps }) => (
+  <div className="checkout-field">
+    <label htmlFor={id}>{label}</label>
+    <div className="checkout-input-wrap">
+      <Icon name={icon} />
+      <select
+        id={id}
+        name={id}
+        aria-invalid={error ? "true" : "false"}
+        aria-describedby={error ? `${id}-error` : undefined}
+        {...selectProps}
+      >
+        {children}
+      </select>
+    </div>
+    {error && (
+      <p id={`${id}-error`} className="checkout-error">
+        {error}
+      </p>
+    )}
+  </div>
+);
+
+const DELIVERY_OPTIONS = [
+  { id: DELIVERY_HOME, label: "Home delivery", note: "Delivered to your address" },
+  {
+    id: DELIVERY_PICKUP,
+    label: "Pick up at a GIG office",
+    note: "Collect from a GIG Logistics office near you",
+  },
+];
+
 const CheckoutPage = ({ onContinue }) => {
   const rootRef = useRef(null);
   const [cart, setCart] = useState(readCart);
@@ -256,6 +308,12 @@ const CheckoutPage = ({ onContinue }) => {
   const [paymentReference, setPaymentReference] = useState("");
   const [verifiedReceipt, setVerifiedReceipt] = useState(null);
   const [receiptError, setReceiptError] = useState("");
+  const [deliveryMethod, setDeliveryMethod] = useState(DELIVERY_HOME);
+  const [pickupState, setPickupState] = useState("");
+  const [stationId, setStationId] = useState("");
+  const isPickup = deliveryMethod === DELIVERY_PICKUP;
+  const offices = useMemo(() => getOffices(pickupState), [pickupState]);
+  const selectedOffice = offices.find((office) => office.id === stationId) ?? null;
 
   const handleReceiptDownload = async () => {
     setReceiptError("");
@@ -351,6 +409,7 @@ const CheckoutPage = ({ onContinue }) => {
   const shipping = lines.length ? SHIPPING_FEE : 0;
   const total = subtotal + shipping;
   const hasUnavailableItems = lines.some((line) => line.unavailable);
+  const shippingLabel = isPickup ? "Pay at pickup" : shipping ? formatMoney(shipping) : "Free";
 
   const updateCart = (next) => {
     setCart(next);
@@ -378,7 +437,8 @@ const CheckoutPage = ({ onContinue }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const found = validate(form);
+    const found = validate(form, isPickup);
+    if (isPickup && !stationId) found.station = "Choose a pickup office.";
     setErrors(found);
     if (Object.keys(found).length || !lines.length || hasUnavailableItems) return;
 
@@ -391,6 +451,9 @@ const CheckoutPage = ({ onContinue }) => {
 
     const order = {
       customer: form,
+      delivery: isPickup
+        ? { method: DELIVERY_PICKUP, state: pickupState, stationId }
+        : { method: DELIVERY_HOME },
       items: lines.map(({ productId, name, quantity, price }) => ({
         productId,
         name,
@@ -495,7 +558,83 @@ const CheckoutPage = ({ onContinue }) => {
               error={errors.phone}
             />
 
-            <h2 className="checkout-group-title">Shipping address</h2>
+            <h2 className="checkout-group-title">Delivery method</h2>
+            <div className="checkout-delivery" role="radiogroup" aria-label="Delivery method">
+              {DELIVERY_OPTIONS.map((option) => (
+                <label key={option.id} className="checkout-delivery-option">
+                  <input
+                    type="radio"
+                    name="deliveryMethod"
+                    value={option.id}
+                    checked={deliveryMethod === option.id}
+                    onChange={() => {
+                      setDeliveryMethod(option.id);
+                      setErrors({});
+                      setStatus("");
+                    }}
+                  />
+                  <span className="checkout-delivery-title">{option.label}</span>
+                  <span className="checkout-delivery-note">{option.note}</span>
+                </label>
+              ))}
+            </div>
+
+            {isPickup && (
+              <>
+                <div className="checkout-row">
+                  <SelectField
+                    id="pickup-state"
+                    label="State"
+                    icon="globe"
+                    value={pickupState}
+                    onChange={(e) => {
+                      setPickupState(e.target.value);
+                      setStationId("");
+                      setErrors((current) => ({ ...current, station: undefined }));
+                    }}
+                  >
+                    <option value="">Select a state</option>
+                    {GIG_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <SelectField
+                    id="pickup-station"
+                    label="Pickup office"
+                    icon="building"
+                    value={stationId}
+                    disabled={!pickupState}
+                    onChange={(e) => {
+                      setStationId(e.target.value);
+                      setErrors((current) => ({ ...current, station: undefined }));
+                    }}
+                    error={errors.station}
+                  >
+                    <option value="">
+                      {pickupState ? "Select an office" : "Select a state first"}
+                    </option>
+                    {offices.map((office) => (
+                      <option key={office.id} value={office.id}>
+                        {office.name} ({office.address.split(",")[0]})
+                      </option>
+                    ))}
+                  </SelectField>
+                </div>
+                <p className="checkout-hint" aria-live="polite">
+                  {selectedOffice
+                    ? `${selectedOffice.address}. `
+                    : ""}
+                  You pay for your order here. GIG&apos;s delivery fee is paid at the office when you
+                  collect. After paying, send your receipt on WhatsApp and we&apos;ll confirm your order.
+                </p>
+              </>
+            )}
+
+            <h2 className="checkout-group-title">
+              {isPickup ? "Who is collecting?" : "Shipping address"}
+            </h2>
             <Field
               id="name"
               label="Full name"
@@ -507,6 +646,8 @@ const CheckoutPage = ({ onContinue }) => {
               onChange={handleChange}
               error={errors.name}
             />
+            {!isPickup && (
+              <>
             <Field
               id="address"
               label="Address"
@@ -560,6 +701,8 @@ const CheckoutPage = ({ onContinue }) => {
                 <option key={country} value={country} />
               ))}
             </datalist>
+              </>
+            )}
 
             <label className="checkout-check" htmlFor="save-info">
               <input
@@ -599,7 +742,7 @@ const CheckoutPage = ({ onContinue }) => {
                 <a
                   className="checkout-submit"
                   href={`https://wa.me/${WHATSAPP_RECEIPT_NUMBER}?text=${encodeURIComponent(
-                    `Hello NurtureNova, I have paid successfully. My receipt is attached. Reference: ${verifiedReceipt.reference}. Please confirm my order.`
+                    buildWhatsappText(verifiedReceipt)
                   )}`}
                   target="_blank"
                   rel="noreferrer"
@@ -685,7 +828,7 @@ const CheckoutPage = ({ onContinue }) => {
                 </div>
                 <div className="checkout-sum-row">
                   <span>Shipping</span>
-                  <span>{shipping ? formatMoney(shipping) : "Free"}</span>
+                  <span>{shippingLabel}</span>
                 </div>
                 <div className="checkout-grand">
                   <span>Total</span>
